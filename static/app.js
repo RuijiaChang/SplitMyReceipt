@@ -285,7 +285,8 @@ async function poll() {
   if (document.hidden || !b.bill || !location.pathname.startsWith("/b/")) return;
   try {
     const fresh = await api(`/api/bills/${b.id}`);
-    if (fresh.version !== b.bill.version) { b.bill = fresh; drawBill(); }
+    // only move forward: a poll that left before our own tap was saved must not undo it on screen
+    if (fresh.version > b.bill.version) { b.bill = fresh; drawBill(); }
   } catch { /* offline for a moment: try again next tick */ }
 }
 

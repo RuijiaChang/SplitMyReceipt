@@ -35,7 +35,7 @@ Python 3.10+.
 ```bash
 pip install -r requirements.txt
 uvicorn server:app --reload        # open http://localhost:8000
-pytest -q                          # 49 tests: money logic, parser, API flow, AI providers, retry/fallback, edge cases
+pytest -q                          # 62 tests: money logic, parser, API flow, AI providers, retry/fallback, edge cases
 ```
 
 Or with Docker (bills are kept in the `smr-data` volume; add `--env-file .env` for AI mode):

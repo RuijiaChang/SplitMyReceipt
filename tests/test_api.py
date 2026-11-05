@@ -113,3 +113,14 @@ def test_own_photo_goes_through_ai_path(monkeypatch):
         r = c.post("/api/extract", files={"file": ("IMG_0042.png", f.read(), "image/png")}).json()
     assert r["mode"] == "OpenAI" and r["issues"] == []
     assert seen == {"mime": "image/jpeg", "jpeg": True}  # PNG was converted to JPEG before sending
+
+
+def test_empty_ai_answer_on_a_photo_is_a_clear_error(monkeypatch):
+    import ai_client
+    monkeypatch.setenv("OPENAI_API_KEY", "server-key")
+    monkeypatch.setattr(ai_client, "models", lambda name: ["m1"])
+    monkeypatch.setattr(ai_client, "_openai_call", lambda *a: (lambda model: None))
+    with open(os.path.join(os.path.dirname(__file__), "..", "samples", "1_lulas_kitchen.png"), "rb") as f:
+        r = c.post("/api/extract", files={"file": ("IMG_1.png", f.read(), "image/png")})
+    assert r.status_code == 422 and "no answer" in r.json()["detail"]
+    assert "No items were found" not in r.json()["detail"]
