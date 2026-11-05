@@ -41,7 +41,7 @@ Ben and Chen can now pay Amy through Venmo or Cash App with the amount filled in
 
 | Sample | Case | Expected |
 |---|---|---|
-| "Dinner for 3" — `1_lulas_kitchen.png` | Representative | "✓ It all adds up: items $68.25 + tax $5.97 + tip $13.65 = $87.87" |
+| "Dinner for 3" — `1_lulas_kitchen.png` | Representative: the full workflow | "✓ It all adds up: items $68.25 + tax $5.97 + tip $13.65 = $87.87". Amy (payer) says *"I had the risotto, we all shared the fries and the iced tea"*; Ben claims the chicken sandwich and the beer, Chen the Caesar salad → **Amy $30.05, Ben $36.48, Chen $21.34** (total $87.87) |
 | "Blurry photo" — `2_golden_wok_blurry.png` | Difficult: blurry, tilted, no printed tip | Read correctly by the AI; edit a price to see the cross-check (in demo mode it is misread on purpose, see [AI modes](#ai-modes)) |
 | "Not a receipt" — `3_not_a_receipt.png` | Invalid input | ⛔ "That doesn't look like a receipt" — cannot create a bill |
 
