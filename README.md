@@ -91,7 +91,7 @@ To try multi-person claiming locally, open the bill link in a private window and
 ### AI modes
 
 - **Demo mode (default, no key):** receipt reading is **mocked**: the three bundled sample images return pre-recorded extractions from `samples/*.json`. Voice/text assignment uses a simple **keyword matcher** instead of AI. Both are labeled in the UI ("Demo: AI mocked", "Demo matcher").
-- **AI mode — OpenAI (default) or Gemini:** put a key in the server's environment and the app switches to AI mode automatically.
+- **AI mode — OpenAI (default) or Gemini:** put a key in the server's environment and the app switches to AI mode automatically. With a key, the bundled samples are read by the AI too (same path as your own photos); the mocked `samples/*.json` are only used in demo mode.
 
   | Provider | Key | Models tried in order (override) |
   |---|---|---|
@@ -269,8 +269,3 @@ Ordered by how much they improve trust in the numbers, then everyday use, then p
 | A corrupt bill file returns a 500 | ❌ |
 | No rate limit on AI endpoints (cost abuse) | ❌ |
 | Browser storage blocked: the app asks your name on every visit | 🟡 works, just repetitive |
-
-## Time spent & how AI was used
-
-- Time spent: `<fill in>`
-- AI use: `<fill in — which assistant you used and for what; how you checked it (tests, running the sample cases on phone-sized screens with several users, reading every file)>`
