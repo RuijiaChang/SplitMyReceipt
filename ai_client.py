@@ -33,6 +33,14 @@ class AIError(RuntimeError):
     pass
 
 
+class EmptyAnswer(Exception):
+    """The model answered with nothing usable: empty text, a refusal, or JSON that isn't an object."""
+
+    def __init__(self, reason: str = ""):
+        super().__init__(reason)
+        self.reason = reason
+
+
 # ------------------------------------------------------------------ config (read at call time, so .env works)
 def provider() -> str | None:
     """'openai', 'gemini', or None (demo mode)."""
@@ -75,10 +83,16 @@ def with_fallback(model_list: list[str], call, *, who: str = "The AI", sleep=tim
     for model in model_list:
         for attempt in range(ATTEMPTS_PER_MODEL):
             try:
-                return json.loads(call(model) or "{}")
-            except json.JSONDecodeError as e:
+                text = call(model)
+                if not text or not text.strip():
+                    raise EmptyAnswer()  # e.g. blocked by a safety filter: not the same as "{}"
+                data = json.loads(text)
+                if not isinstance(data, dict):
+                    raise json.JSONDecodeError("expected a JSON object", text, 0)
+                return data
+            except (json.JSONDecodeError, EmptyAnswer) as e:
                 last = e
-                break  # garbled answer: try the next model
+                break  # garbled, empty or refused: try the next model
             except Exception as e:  # noqa: BLE001 - SDK errors vary by provider
                 last = e
                 code = status_of(e)
@@ -93,6 +107,9 @@ def with_fallback(model_list: list[str], call, *, who: str = "The AI", sleep=tim
 
 def friendly(e: Exception | None, who: str = "The AI") -> str:
     code = status_of(e)
+    if isinstance(e, EmptyAnswer):
+        why = f" (it declined: {e.reason[:120]})" if e.reason else " (it may have declined this request)"
+        return f"{who} gave no answer{why}. Try another photo or wording, or type it in yourself."
     if isinstance(e, json.JSONDecodeError):
         return f"{who} returned an answer we couldn't read. Please try again."
     if code in (500, 502, 503, 504, 408, 409):
@@ -122,7 +139,10 @@ def _openai_call(api_key: str, prompt: str, schema: dict, image: tuple[bytes, st
             response_format={"type": "json_schema",
                              "json_schema": {"name": "result", "schema": schema, "strict": True}},
         )
-        return resp.choices[0].message.content
+        msg = resp.choices[0].message
+        if getattr(msg, "refusal", None):
+            raise EmptyAnswer(msg.refusal)
+        return msg.content
     return call
 
 

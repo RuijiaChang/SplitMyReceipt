@@ -35,9 +35,14 @@ class Proposal:
 
 def clean_proposal(raw: dict, n_items: int, people: list[str], speaker: str) -> Proposal:
     """Validate untrusted model output: drop bad indexes, normalise names."""
-    known = {p.lower(): p for p in people}
     prop = Proposal()
-    for a in raw.get("assignments") or []:
+    if not isinstance(raw, dict):
+        return prop
+    known = {p.lower(): p for p in people}  # lower-case -> canonical; new people are added as we go
+    unclear: list[str] = []
+    for a in _as_list(raw.get("assignments")):
+        if not isinstance(a, dict):
+            continue
         try:
             idx = int(a.get("item_index", a.get("item")))
         except (TypeError, ValueError):
@@ -45,25 +50,40 @@ def clean_proposal(raw: dict, n_items: int, people: list[str], speaker: str) -> 
         if not 0 <= idx < n_items:
             continue
         names = []
-        for n in a.get("people") or []:
+        for n in _as_list(a.get("people")):
             n = str(n).strip()
             if not n:
                 continue
             if n.lower() in _EVERYONE_WORDS or n == EVERYONE:
                 names.append(EVERYONE)
                 continue
-            if n.lower() in {"i", "me", "我"} and speaker:
+            if n.lower() in _ME_WORDS:
+                if not speaker:  # we don't know who "I" is: don't invent a person called "I"
+                    unclear.append(f"“{n}” (pick your name first)")
+                    continue
                 n = speaker
-            n = known.get(n.lower(), n[:30])
-            if n.lower() not in known and n not in prop.new_people:
-                prop.new_people.append(n)
-            names.append(n)
-        if EVERYONE in names:
-            names = [EVERYONE]  # "everyone" already covers anyone else named
-        if names:
-            prop.assignments[idx] = list(dict.fromkeys(names))
-    prop.unclear = [str(u) for u in (raw.get("unclear") or []) if str(u).strip()][:5]
+            if n.lower() not in known:
+                known[n.lower()] = n[:30]
+                prop.new_people.append(known[n.lower()])
+            names.append(known[n.lower()])
+        if not names:
+            continue
+        # The same item can come back more than once ("Ben had fries… Chen too"): merge, don't overwrite.
+        merged = prop.assignments.get(idx, []) + names
+        prop.assignments[idx] = [EVERYONE] if EVERYONE in merged else list(dict.fromkeys(merged))
+    unclear += [str(u) for u in _as_list(raw.get("unclear")) if str(u).strip()]
+    prop.unclear = list(dict.fromkeys(unclear))[:5]
     return prop
+
+
+_ME_WORDS = {"i", "me", "myself", "我"}
+
+
+def _as_list(v) -> list:
+    """Model output that should be a list: a lone string/value becomes [value], None becomes []."""
+    if v is None:
+        return []
+    return v if isinstance(v, list) else [v]
 
 
 # ------------------------------------------------------------------ demo mode

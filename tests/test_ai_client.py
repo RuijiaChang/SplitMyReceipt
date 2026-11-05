@@ -139,3 +139,43 @@ def assert_strict(schema, path="root"):
 def test_schemas_are_valid_for_openai_strict_mode():
     assert_strict(RECEIPT_SCHEMA)
     assert_strict(ASSIGN_SCHEMA)
+
+
+# ------------------------------------------------------------------ empty / non-object answers
+@pytest.mark.parametrize("empty", [None, "", "   "])
+def test_empty_answer_falls_back_then_fails_clearly(empty):
+    call, calls = scripted({"m1": [empty], "m2": [empty]})
+    with pytest.raises(AIError) as e:
+        with_fallback(["m1", "m2"], call, who="Gemini", sleep=lambda s: None)
+    assert calls == ["m1", "m2"]  # an empty answer is a failure, not "{}"
+    assert "no answer" in str(e.value)
+
+
+def test_empty_answer_then_good_backup_model():
+    call, _ = scripted({"m1": [None], "m2": ['{"ok": true}']})
+    assert with_fallback(["m1", "m2"], call, sleep=lambda s: None) == {"ok": True}
+
+
+def test_non_object_json_is_not_accepted():
+    call, calls = scripted({"m1": ["[1, 2]"], "m2": ['"hi"']})
+    with pytest.raises(AIError):
+        with_fallback(["m1", "m2"], call, sleep=lambda s: None)
+    assert calls == ["m1", "m2"]
+
+
+def test_openai_refusal_is_an_empty_answer(monkeypatch):
+    import types as t
+
+    import openai
+    msg = t.SimpleNamespace(content=None, refusal="I can't help with that.")
+    resp = t.SimpleNamespace(choices=[t.SimpleNamespace(message=msg)])
+
+    class FakeClient:
+        def __init__(self, **kw):
+            self.chat = t.SimpleNamespace(completions=t.SimpleNamespace(create=lambda **kw: resp))
+
+    monkeypatch.setattr(openai, "OpenAI", FakeClient)
+    call = ai_client._openai_call("k", "p", {"type": "object"}, None)
+    with pytest.raises(AIError) as e:
+        with_fallback(["m1"], call, who="OpenAI", sleep=lambda s: None)
+    assert "declined" in str(e.value) and "I can't help with that." in str(e.value)
