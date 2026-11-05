@@ -173,3 +173,22 @@ def test_high_megapixel_phone_jpeg_still_works():
     Image.new("L", (16320, 12240), 200).save(buf, "JPEG")  # 200 MP, like a phone's high-res mode
     jpeg, _ = server.normalize_image(buf.getvalue())
     assert max(Image.open(io.BytesIO(jpeg)).size) <= 2000
+
+
+# ---------------------------------------------------------------- names in different case, and older bill files
+def test_same_name_in_different_case_is_one_person():
+    bid = new_bill()
+    assert c.post(f"/api/bills/{bid}/people", json={"name": "ben"}).json()["name"] == "ben"
+    v = c.post(f"/api/bills/{bid}/claim", json={"item": 0, "person": "BEN", "on": True}).json()
+    assert v["people"] == ["Amy", "ben"] and v["claims"][0] == ["ben"]
+    assert c.post(f"/api/bills/{bid}/people", json={"name": "amy"}).json()["name"] == "Amy"
+
+
+def test_bills_saved_with_paid_true_still_load():
+    bid = new_bill()
+    c.post(f"/api/bills/{bid}/claim", json={"item": 0, "person": "Ben", "on": True})
+    bill = server.load_bill(bid)
+    bill["paid"] = {"Amy": True, "Ben": True}  # format used before paid amounts were recorded
+    server.save_bill(bill)
+    ben = shares(c.get(f"/api/bills/{bid}").json())["Ben"]
+    assert ben["paid"] and ben["due_cents"] == 0
