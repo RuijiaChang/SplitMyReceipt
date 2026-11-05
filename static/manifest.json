@@ -1,0 +1,9 @@
+{
+  "name": "SplitMyReceipt",
+  "short_name": "Split",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E6EBE8",
+  "theme_color": "#0B7A5E",
+  "icons": [{ "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

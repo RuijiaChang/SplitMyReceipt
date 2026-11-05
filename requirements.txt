@@ -1,0 +1,11 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+openai>=1.50
+google-genai>=1.20
+pillow>=10.1
+pydantic>=2.0
+python-dotenv>=1.0
+# tests
+pytest>=8.0
+httpx>=0.27

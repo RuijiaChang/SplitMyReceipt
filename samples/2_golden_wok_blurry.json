@@ -1,0 +1,36 @@
+{
+  "is_receipt": true,
+  "merchant": "Golden Wok",
+  "items": [
+    {
+      "name": "Kung Pao Chicken",
+      "quantity": 1,
+      "price": 15.95
+    },
+    {
+      "name": "Beef Chow Fun",
+      "quantity": 1,
+      "price": 6.5
+    },
+    {
+      "name": "Veg Dumplings (8)",
+      "quantity": 1,
+      "price": 9.5
+    },
+    {
+      "name": "Hot & Sour Soup",
+      "quantity": 1,
+      "price": 6.75
+    },
+    {
+      "name": "Jasmine Rice",
+      "quantity": 3,
+      "price": 7.5
+    }
+  ],
+  "subtotal": 56.2,
+  "tax": 5.76,
+  "tip": null,
+  "total": 61.96,
+  "notes": "Photo is blurry and tilted; the price for Beef Chow Fun was hard to read."
+}
