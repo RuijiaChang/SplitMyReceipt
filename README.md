@@ -155,3 +155,4 @@ Anyone with the link triggers AI calls on your key, so set a monthly budget limi
   - **Review:** an edge-case review of the working prototype. Each fix started with a failing test; the cases that are still open are listed in [docs/EDGE_CASES.md](docs/EDGE_CASES.md).
   - **Docs:** drafting this README and the docs folder.
 - **How I checked it:** I made the product decisions and reviewed every change. All money math is plain code covered by tests; the 76 tests run in Docker; and the walkthrough above was run on the live deploy with several browsers at phone width.
+- **Prior work reused:** none; built from scratch for this case study.
