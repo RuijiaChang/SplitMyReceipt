@@ -111,6 +111,8 @@ function extraTip() {
   return Math.round(itemsSum() * c.tip / 100);
 }
 
+const newTotal = () => itemsSum() + (c.receipt.tax_cents || 0) + (c.receipt.fees_cents || 0) + extraTip();
+
 function renderReview() {
   const r = c.receipt;
   if (!r.is_receipt) {
@@ -138,6 +140,7 @@ function renderReview() {
       <div class="money-row"><span>Subtotal</span><input id="m-sub" inputmode="decimal" aria-label="Subtotal"><i></i></div>
       <div class="money-row"><span>Tax</span><input id="m-tax" inputmode="decimal" aria-label="Tax"><i></i></div>
       <div class="money-row"><span>Tip on receipt</span><input id="m-tip" inputmode="decimal" aria-label="Tip on receipt" placeholder="none"><i></i></div>
+      <div class="money-row"><span>Service &amp; fees</span><input id="m-fee" inputmode="decimal" aria-label="Service charge and fees" placeholder="none"><i></i></div>
       <div class="money-row" style="font-weight:500"><span>Total</span><input id="m-tot" inputmode="decimal" aria-label="Total"><i></i></div>
     </div>
     <div id="issues"></div>
@@ -157,11 +160,12 @@ function renderReview() {
       <button class="btn" id="create" style="flex:1">Create share link</button>
     </div></div>`;
 
-  const money = { "m-sub": "subtotal_cents", "m-tax": "tax_cents", "m-tip": "tip_cents", "m-tot": "total_cents" };
+  const money = { "m-sub": "subtotal_cents", "m-tax": "tax_cents", "m-tip": "tip_cents", "m-fee": "fees_cents", "m-tot": "total_cents" };
+  const zeroWhenEmpty = ["tax_cents", "tip_cents", "fees_cents"];
   for (const [id, field] of Object.entries(money)) {
     const el = $("#" + id);
     el.value = r[field] ? dollars(r[field]) : (field === "tax_cents" ? "0.00" : "");
-    el.oninput = () => { const v = toCents(el.value); r[field] = field === "tax_cents" || field === "tip_cents" ? (v || 0) : v; onEdit(); };
+    el.oninput = () => { const v = toCents(el.value); r[field] = zeroWhenEmpty.includes(field) ? (v || 0) : v; onEdit(); };
     el.onblur = () => { if (r[field] != null && el.value !== "") el.value = dollars(r[field]); };
   }
   $("#merchant").oninput = (e) => (r.merchant = e.target.value);
@@ -208,7 +212,7 @@ function drawIssues() {
   if (!box) return;
   if (!c.issues.length) {
     const r = c.receipt;
-    box.innerHTML = `<div class="note ok">✓ It all adds up: items ${fmt(itemsSum())} + tax ${fmt(r.tax_cents)}${r.tip_cents ? ` + tip ${fmt(r.tip_cents)}` : ""} = ${fmt(r.total_cents)}</div>`;
+    box.innerHTML = `<div class="note ok">✓ It all adds up: items ${fmt(itemsSum())} + tax ${fmt(r.tax_cents)}${r.tip_cents ? ` + tip ${fmt(r.tip_cents)}` : ""}${r.fees_cents ? ` + fees ${fmt(r.fees_cents)}` : ""} = ${fmt(r.total_cents)}</div>`;
   } else {
     box.innerHTML = c.issues.map((i) => `<div class="note ${i.level === "error" ? "err" : "warn"}">${i.level === "error" ? "⛔" : "⚠️"} ${esc(i.message)}</div>`).join("");
   }
@@ -227,10 +231,10 @@ function drawTip() {
       <button class="chip" data-tip="custom" aria-pressed="${c.tip === "custom"}">Custom</button>
     </div>
     ${c.tip === "custom" ? `<input class="field" id="custom-tip" inputmode="decimal" placeholder="Tip amount in $" value="${esc(c.customTip)}" style="margin-top:8px">` : ""}
-    <p class="small" style="margin-top:8px">Tip: <b>${fmt(extraTip())}</b> · New total: <b>${fmt(itemsSum() + (c.receipt.tax_cents || 0) + extraTip())}</b></p>`;
+    <p class="small" style="margin-top:8px">Tip: <b>${fmt(extraTip())}</b> · New total: <b>${fmt(newTotal())}</b></p>`;
   box.querySelectorAll("[data-tip]").forEach((b) => (b.onclick = () => { c.tip = b.dataset.tip === "custom" ? "custom" : +b.dataset.tip; drawTip(); }));
   const ct = $("#custom-tip");
-  if (ct) ct.oninput = () => { c.customTip = ct.value; const p = box.querySelector("p.small:last-child"); p.innerHTML = `Tip: <b>${fmt(extraTip())}</b> · New total: <b>${fmt(itemsSum() + (c.receipt.tax_cents || 0) + extraTip())}</b>`; };
+  if (ct) ct.oninput = () => { c.customTip = ct.value; const p = box.querySelector("p.small:last-child"); p.innerHTML = `Tip: <b>${fmt(extraTip())}</b> · New total: <b>${fmt(newTotal())}</b>`; };
 }
 
 function updateCreate() {
@@ -333,6 +337,7 @@ function drawBill() {
       <div class="rule"></div>
       <div class="line dim"><span class="name">Subtotal</span><span class="price">${fmt(s.subtotal_cents)}</span></div>
       <div class="line dim"><span class="name">Tax</span><span class="price">${fmt(bill.tax_cents)}</span></div>
+      ${bill.fees_cents ? `<div class="line dim"><span class="name">Service &amp; fees</span><span class="price">${fmt(bill.fees_cents)}</span></div>` : ""}
       <div class="line dim"><span class="name">Tip</span><span class="price">${fmt(bill.tip_cents)}</span></div>
       <div class="line total"><span class="name">Total</span><span class="price">${fmt(s.total_cents)}</span></div>
     </div>`;
@@ -348,6 +353,7 @@ function drawBill() {
       <div class="detail">
         ${p.items.map((x) => `<div><span>${esc(x.name)}</span><span>${fmt(x.cents)}</span></div>`).join("") || "<div>No items yet</div>"}
         <div><span>Tax share</span><span>${fmt(p.tax_cents)}</span></div>
+        ${p.fees_cents ? `<div><span>Fees share</span><span>${fmt(p.fees_cents)}</span></div>` : ""}
         <div><span>Tip share</span><span>${fmt(p.tip_cents)}</span></div>
       </div></details></li>`).join("") +
     (s.unassigned.length ? `<li class="note warn">Still unclaimed: ${s.unassigned.map(esc).join(", ")} (${fmt(s.unassigned_cents)} with tax &amp; tip)</li>` : "");

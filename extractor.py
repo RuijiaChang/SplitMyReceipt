@@ -10,6 +10,7 @@ Two modes:
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from splitter import Item, Receipt, to_cents
@@ -23,9 +24,15 @@ Rules:
 - is_receipt: false if the image is not a receipt or bill (then leave items empty).
 - items: one entry per purchased line. `price` is the LINE TOTAL in dollars
   (quantity already multiplied in). Include discounts/coupons as negative prices.
-  Do NOT include subtotal, tax, tip, total, payment or change lines as items.
-- subtotal, tax, tip, total: numbers as printed, or null if not printed.
+  Do NOT include subtotal, tax, tip, fees, total, payment or change lines as items.
+- subtotal, tax, total: numbers as printed, or null if not printed.
   If there are several tax lines, add them together.
+- tip: only a tip or gratuity that was actually CHARGED (it is part of the total),
+  e.g. "Gratuity 18%" for a large party, or a tip written in by hand. Many receipts
+  print a "suggested tip" / "tip guide" table (15% / 18% / 20%): those are only
+  suggestions — never use them as the tip. null if no tip was charged.
+- fees: the sum of service charge, delivery fee, booking fee, card surcharge and
+  similar fees that are part of the total, or null if there are none.
 - Copy numbers exactly as printed. Never guess or invent a number; if a value is
   unreadable, use null and mention it in `notes`.
 - notes: short description of anything unclear (blurry text, cut-off lines)."""
@@ -36,12 +43,23 @@ class ExtractionError(RuntimeError):
 
 
 # ------------------------------------------------------------- parsing (pure)
+# Safety net for lines the model put under items although they aren't dishes. Anchored at the
+# start of the name (after an optional "18%"), so "Tri-Tip Steak" or "Fee-fi Fries" stay dishes.
+_PCT = r"^\s*(?:\d+(?:\.\d+)?\s*%\s*)?"
+_FEE_LINE = re.compile(_PCT + r"(?:service\s*(?:charge|fee)|delivery\s*fee|booking\s*fee|convenience\s*fee"
+                       r"|(?:credit\s*)?card\s*(?:surcharge|fee)|surcharge)\b|服务费", re.IGNORECASE)
+_TIP_LINE = re.compile(_PCT + r"(?:auto(?:matic)?[-\s]*)?(?:gratuity|tip)\b|小费", re.IGNORECASE)
+
+
 def receipt_from_dict(data: dict) -> tuple[Receipt, str]:
     """Turn the model's (untrusted) JSON into a Receipt. Returns (receipt, notes)."""
     if not isinstance(data, dict):
         raise ExtractionError("The AI response was not a JSON object.")
 
     items = []
+    fees_cents = to_cents(data.get("fees")) or 0
+    tip_cents = to_cents(data.get("tip")) or 0
+    moved: list[str] = []
     for raw in data.get("items") or []:
         if not isinstance(raw, dict):
             continue
@@ -50,6 +68,14 @@ def receipt_from_dict(data: dict) -> tuple[Receipt, str]:
             continue  # unreadable line: validation will flag the mismatch
         qty = raw.get("quantity")
         name = str(raw.get("name") or "").strip()
+        if cents > 0 and _FEE_LINE.search(name):
+            fees_cents += cents
+            moved.append(f"“{name}” → fees")
+            continue
+        if cents > 0 and _TIP_LINE.search(name):
+            tip_cents += cents
+            moved.append(f"“{name}” → tip")
+            continue
         if isinstance(qty, (int, float)) and qty > 1 and name:
             name = f"{name} ×{int(qty)}"
         items.append(Item(name, cents))
@@ -57,13 +83,17 @@ def receipt_from_dict(data: dict) -> tuple[Receipt, str]:
     receipt = Receipt(
         items=items,
         tax_cents=to_cents(data.get("tax")) or 0,
-        tip_cents=to_cents(data.get("tip")) or 0,
+        tip_cents=tip_cents,
+        fees_cents=fees_cents,
         subtotal_cents=to_cents(data.get("subtotal")),
         total_cents=to_cents(data.get("total")),
         merchant=str(data.get("merchant") or "").strip(),
         is_receipt=bool(data.get("is_receipt", True)),
     )
-    return receipt, str(data.get("notes") or "")
+    notes = str(data.get("notes") or "")
+    if moved:
+        notes = (notes + " " if notes else "") + "Moved out of the items: " + ", ".join(moved) + "."
+    return receipt, notes
 
 
 # ------------------------------------------------------------- demo mode
@@ -87,7 +117,7 @@ NUM_OR_NULL = {"type": ["number", "null"]}
 RECEIPT_SCHEMA = {  # strict JSON Schema: same for OpenAI and Gemini
     "type": "object",
     "additionalProperties": False,
-    "required": ["is_receipt", "merchant", "items", "subtotal", "tax", "tip", "total", "notes"],
+    "required": ["is_receipt", "merchant", "items", "subtotal", "tax", "tip", "fees", "total", "notes"],
     "properties": {
         "is_receipt": {"type": "boolean"},
         "merchant": {"type": "string"},
@@ -96,7 +126,8 @@ RECEIPT_SCHEMA = {  # strict JSON Schema: same for OpenAI and Gemini
             "required": ["name", "quantity", "price"],
             "properties": {"name": {"type": "string"}, "quantity": NUM_OR_NULL, "price": {"type": "number"}},
         }},
-        "subtotal": NUM_OR_NULL, "tax": NUM_OR_NULL, "tip": NUM_OR_NULL, "total": NUM_OR_NULL,
+        "subtotal": NUM_OR_NULL, "tax": NUM_OR_NULL, "tip": NUM_OR_NULL, "fees": NUM_OR_NULL,
+        "total": NUM_OR_NULL,
         "notes": {"type": "string"},
     },
 }

@@ -10,7 +10,7 @@ Rules
 * Discounts (negative lines) don't need claiming. Unclaimed ones come off everyone
   in proportion to what they ordered. A claimed discount can bring its claimers
   down to $0 but never below; whatever is left is shared by the table the same way.
-* Tax and tip are allocated in proportion to each person's item subtotal,
+* Fees (service charge, delivery fee, card surcharge…), tax and tip are allocated in proportion to each person's item subtotal,
   using the largest-remainder method so the shares sum exactly to the total.
 """
 from __future__ import annotations
@@ -57,6 +57,7 @@ class Receipt:
     items: list[Item]
     tax_cents: int = 0
     tip_cents: int = 0
+    fees_cents: int = 0  # service charges and other fees, shared like tax
     subtotal_cents: int | None = None  # as printed on the receipt
     total_cents: int | None = None  # as printed on the receipt
     merchant: str = ""
@@ -80,10 +81,11 @@ class PersonShare:
     subtotal_cents: int = 0
     tax_cents: int = 0
     tip_cents: int = 0
+    fees_cents: int = 0
 
     @property
     def total_cents(self) -> int:
-        return self.subtotal_cents + self.tax_cents + self.tip_cents
+        return self.subtotal_cents + self.tax_cents + self.tip_cents + self.fees_cents
 
 
 @dataclass
@@ -92,12 +94,13 @@ class SplitResult:
     subtotal_cents: int
     tax_cents: int
     tip_cents: int
+    fees_cents: int = 0
     unassigned: list[str] = field(default_factory=list)  # item names nobody has claimed yet
     unassigned_cents: int = 0  # their price + their share of tax/tip
 
     @property
     def total_cents(self) -> int:
-        return self.subtotal_cents + self.tax_cents + self.tip_cents
+        return self.subtotal_cents + self.tax_cents + self.tip_cents + self.fees_cents
 
     @property
     def complete(self) -> bool:
@@ -131,8 +134,8 @@ def validate_receipt(r: Receipt) -> list[Issue]:
         elif it.price_cents < 0:
             issues.append(Issue("warning", f"“{it.name}” is negative ({fmt(it.price_cents)}); treated as a discount."))
 
-    if r.tax_cents < 0 or r.tip_cents < 0:
-        issues.append(Issue("error", "Tax and tip cannot be negative."))
+    if r.tax_cents < 0 or r.tip_cents < 0 or r.fees_cents < 0:
+        issues.append(Issue("error", "Tax, tip and fees cannot be negative."))
 
     items_sum = r.items_sum_cents
     if items_sum < 0:
@@ -147,11 +150,18 @@ def validate_receipt(r: Receipt) -> list[Issue]:
     if r.total_cents is None:
         issues.append(Issue("warning", "No total was found on the receipt, so the sum can't be cross-checked."))
     else:
-        computed = items_sum + r.tax_cents + r.tip_cents
-        if abs(computed - r.total_cents) > TOLERANCE:
+        computed = items_sum + r.tax_cents + r.tip_cents + r.fees_cents
+        if r.tip_cents > 0 and abs(computed - r.tip_cents - r.total_cents) <= TOLERANCE:
+            # Receipts often print a "suggested tip" guide; the total without it matches exactly.
             issues.append(Issue(
                 "warning",
-                f"Items + tax + tip = {fmt(computed)}, but the receipt total is {fmt(r.total_cents)} "
+                f"The tip {fmt(r.tip_cents)} isn't included in the receipt total {fmt(r.total_cents)}. "
+                "It may only be a suggested tip — clear it if it wasn't actually charged.",
+            ))
+        elif abs(computed - r.total_cents) > TOLERANCE:
+            issues.append(Issue(
+                "warning",
+                f"Items + tax + tip{' + fees' if r.fees_cents else ''} = {fmt(computed)}, but the receipt total is {fmt(r.total_cents)} "
                 f"(off by {fmt(abs(computed - r.total_cents))}). Please check the highlighted numbers.",
             ))
 
@@ -244,13 +254,17 @@ def compute_split(receipt: Receipt, assignments: list[list[str]], *,
         s.tax_cents = t
     for s, t in zip(buckets, allocate_proportional(receipt.tip_cents, weights)):
         s.tip_cents = t
+    for s, t in zip(buckets, allocate_proportional(receipt.fees_cents, weights)):
+        s.fees_cents = t
 
     # Invariant: nobody's money gets lost or invented.
-    assert sum(s.total_cents for s in buckets) == receipt.items_sum_cents + receipt.tax_cents + receipt.tip_cents
+    assert sum(s.total_cents for s in buckets) == (receipt.items_sum_cents + receipt.tax_cents
+                                                   + receipt.tip_cents + receipt.fees_cents)
 
     unclaimed = shares.pop(_UNCLAIMED, None)
     return SplitResult(
         [s for s in shares.values()], receipt.items_sum_cents, receipt.tax_cents, receipt.tip_cents,
+        fees_cents=receipt.fees_cents,
         unassigned=unassigned, unassigned_cents=unclaimed.total_cents if unclaimed else 0,
     )
 
@@ -258,10 +272,11 @@ def compute_split(receipt: Receipt, assignments: list[list[str]], *,
 def format_summary(result: SplitResult, merchant: str = "", payer: str = "") -> str:
     """Plain text the user can paste into a group chat."""
     title = f"🧾 {merchant} split" if merchant else "🧾 Bill split"
-    lines = [title, f"Total {fmt(result.total_cents)} (tax {fmt(result.tax_cents)}, tip {fmt(result.tip_cents)})", ""]
+    fees = f", fees {fmt(result.fees_cents)}" if result.fees_cents else ""
+    lines = [title, f"Total {fmt(result.total_cents)} (tax {fmt(result.tax_cents)}, tip {fmt(result.tip_cents)}{fees})", ""]
     for s in result.shares:
         owes = "" if s.name == payer else (f" → pay {payer}" if payer else "")
         lines.append(f"• {s.name}: {fmt(s.total_cents)}{owes}")
         lines.append("    " + ", ".join(f"{n} {fmt(c)}" for n, c in s.items))
-    lines += ["", "Tax & tip shared in proportion to what each person ordered.", "— SplitMyReceipt"]
+    lines += ["", "Tax, tip and fees shared in proportion to what each person ordered.", "— SplitMyReceipt"]
     return "\n".join(lines)

@@ -83,7 +83,7 @@ def receipt_json(r: Receipt) -> dict:
     return {"merchant": r.merchant, "is_receipt": r.is_receipt,
             "items": [{"name": i.name, "price_cents": i.price_cents} for i in r.items],
             "subtotal_cents": r.subtotal_cents, "tax_cents": r.tax_cents,
-            "tip_cents": r.tip_cents, "total_cents": r.total_cents}
+            "tip_cents": r.tip_cents, "fees_cents": r.fees_cents, "total_cents": r.total_cents}
 
 
 def issues_json(r: Receipt) -> list[dict]:
@@ -124,7 +124,8 @@ def add_person(bill: dict, name: str) -> str:
 def bill_view(bill: dict) -> dict:
     """Bill + live split, as sent to every viewer."""
     r = Receipt(items=[Item(i["name"], i["price_cents"]) for i in bill["items"]],
-                tax_cents=bill["tax_cents"], tip_cents=bill["tip_cents"], merchant=bill["merchant"])
+                tax_cents=bill["tax_cents"], tip_cents=bill["tip_cents"],
+                fees_cents=bill.get("fees_cents", 0), merchant=bill["merchant"])  # older bills have no fees
     claims = [bill["people"] if EVERYONE in who else who for who in bill["claims"]]  # live "everyone"
     res = compute_split(r, claims, allow_unassigned=True, people=bill["people"])
     shares = []
@@ -138,10 +139,11 @@ def bill_view(bill: dict) -> dict:
         due = s.total_cents - (paid_cents or 0)
         shares.append({"name": s.name, "items": [{"name": n, "cents": c} for n, c in s.items],
                        "subtotal_cents": s.subtotal_cents, "tax_cents": s.tax_cents, "tip_cents": s.tip_cents,
-                       "total_cents": s.total_cents, "paid_cents": paid_cents, "due_cents": due,
+                       "fees_cents": s.fees_cents, "total_cents": s.total_cents, "paid_cents": paid_cents, "due_cents": due,
                        "paid": paid_cents is not None and due == 0})
     return {**{k: bill[k] for k in ("id", "merchant", "items", "tax_cents", "tip_cents", "people",
                                     "payer", "pay", "claims", "version")},
+            "fees_cents": bill.get("fees_cents", 0),
             "split": {"shares": shares, "unassigned": res.unassigned, "unassigned_cents": res.unassigned_cents,
                       "total_cents": res.total_cents, "subtotal_cents": res.subtotal_cents,
                       "complete": res.complete}}
@@ -194,11 +196,13 @@ class ReceiptIn(BaseModel):
     subtotal_cents: int | None = None
     tax_cents: int = 0
     tip_cents: int = 0
+    fees_cents: int = 0
     total_cents: int | None = None
 
     def to_receipt(self) -> Receipt:
         return Receipt(items=[Item(i.name.strip()[:60] or "(unnamed)", i.price_cents) for i in self.items],
-                       tax_cents=self.tax_cents, tip_cents=self.tip_cents, subtotal_cents=self.subtotal_cents,
+                       tax_cents=self.tax_cents, tip_cents=self.tip_cents, fees_cents=self.fees_cents,
+                       subtotal_cents=self.subtotal_cents,
                        total_cents=self.total_cents, merchant=self.merchant.strip()[:60])
 
 
@@ -228,7 +232,7 @@ def create_bill(body: BillIn):
     handle = lambda h: re.sub(r"[^A-Za-z0-9_\-]", "", h.lstrip("@$"))[:30]
     bill = {"id": secrets.token_urlsafe(6), "created": time.time(), "merchant": r.merchant,
             "items": [{"name": i.name, "price_cents": i.price_cents} for i in r.items],
-            "tax_cents": r.tax_cents, "tip_cents": r.tip_cents + body.extra_tip_cents,
+            "tax_cents": r.tax_cents, "tip_cents": r.tip_cents + body.extra_tip_cents, "fees_cents": r.fees_cents,
             "people": [payer], "payer": payer, "pay": {"venmo": handle(body.venmo), "cashapp": handle(body.cashapp)},
             "claims": [[] for _ in r.items], "paid": {}, "version": 0}
     with _lock:

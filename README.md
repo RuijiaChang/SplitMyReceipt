@@ -12,7 +12,7 @@ Existing apps (Splitwise, Tab, Forks, SplitBill AI) already scan receipts. In th
 
 ## Core workflow
 
-1. **Payer snaps the receipt.** The AI (OpenAI or Gemini) reads items, tax, tip and total into a fixed JSON schema.
+1. **Payer snaps the receipt.** The AI (OpenAI or Gemini) reads items, tax, tip, service charges/fees and total into a fixed JSON schema. A printed "suggested tip" table is not treated as a tip, and fee or gratuity lines the AI lists as dishes are moved out of the items by code.
 2. **Check.** Items are cross-checked against the printed subtotal and total; mismatches, non-receipts and odd tax are flagged, and every line is editable. A tip can be added if none was printed.
 3. **Share the link.** Friends open `/b/<id>`, pick or type their name, and tap the dishes they had. Everyone's screen updates live.
 4. **Or say it.** "I had the kung pao chicken, Ben got the chow fun, we all shared the dumplings." The AI maps the sentence to items and people; the app shows the proposal and **nothing changes until you tap Apply**. "Everyone" is stored as *the whole table*, so friends who join later are included automatically.
@@ -24,7 +24,7 @@ Existing apps (Splitwise, Tab, Forks, SplitBill AI) already scan receipts. In th
 |---|---|---|
 | Read the receipt photo | OpenAI or Gemini, strict JSON Schema output | Photos are messy; rules can't do this |
 | Understand "who had what" speech | Browser speech-to-text → AI maps text to item indexes | Natural language, nicknames, English/Chinese |
-| Check the reading | Plain code: items vs subtotal, sum vs total | The receipt's printed totals are a free checksum |
+| Check the reading | Plain code: items vs subtotal, sum vs total, tip missing from the total (= only suggested) | The receipt's printed totals are a free checksum |
 | All money math | Plain code, integer cents, largest-remainder rounding | AI arithmetic isn't reliable; shares must add up exactly |
 | Apply anything to the bill | Only after the user confirms | AI proposes, people decide |
 
@@ -35,7 +35,7 @@ Python 3.10+.
 ```bash
 pip install -r requirements.txt
 uvicorn server:app --reload        # open http://localhost:8000
-pytest -q                          # 62 tests: money logic, parser, API flow, AI providers, retry/fallback, edge cases
+pytest -q                          # 74 tests: money logic, parser, API flow, AI providers, retry/fallback, edge cases
 ```
 
 Or with Docker (bills are kept in the `smr-data` volume; add `--env-file .env` for AI mode):
