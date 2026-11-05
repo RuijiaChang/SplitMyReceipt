@@ -24,7 +24,7 @@ On https://splitmyreceipt.onrender.com:
 
 1. Tap the **"Blurry photo"** sample. The AI reads it in about 2 seconds and shows "✓ It all adds up: items $56.20 + tax $5.76 = $61.96".
 2. To see the cross-check catch a misread, change **Beef Chow Fun** to `6.50`: "Items add up to $46.20 but the receipt subtotal says $56.20 (off by $10.00)…". Change it back to `16.50` and the warning clears.
-3. Choose an **18%** tip ($10.12), enter **Amy** as your name, and tap **Create share link**.
+3. Choose an **18%** tip ($10.12), enter **Amy** as your name and any Venmo handle (e.g. `@amy`) so the pay buttons appear, and tap **Create share link**.
 4. On the bill page, type or say *"I had the kung pao chicken, everyone shared the dumplings and the rice"* → **Match items** → **Apply**.
 5. Open the bill link in a private window as **Ben** and tap Beef Chow Fun; in another private window as **Chen**, tap Hot & Sour Soup. Each window updates within a few seconds. (Who you are is remembered per browser, so use one private window per person.)
 
@@ -51,7 +51,7 @@ Ben and Chen can now pay Amy through Venmo or Cash App with the amount filled in
 2. **Check.** Items are cross-checked against the printed subtotal and total; mismatches, non-receipts, odd tax and a tip that isn't in the total (often just a printed "suggested tip") are flagged. Every line is editable, and a tip can be added if none was charged.
 3. **Share the link.** Friends open `/b/<id>`, pick or type their name, and tap the dishes they had. Everyone's screen updates live.
 4. **Or say it.** "I had the kung pao chicken, Ben got the chow fun, we all shared the dumplings." The AI maps the sentence to items and people (English or Chinese); the app shows the proposal and **nothing changes until you tap Apply**. "Everyone" means *the whole table*, so friends who join later are included automatically.
-5. **Pay.** When every item is claimed, each friend gets "Pay Amy $28.43" → Venmo or Cash App with the amount filled in (or copy it for Zelle), then taps "I've paid". If their share changes later, the app shows what's still due.
+5. **Pay.** When every item is claimed, each friend taps **Pay Amy** → Venmo or Cash App opens with their share (e.g. $28.43) filled in, or they copy it for Zelle; then they tap "I've paid". If their share changes later, the app shows what's still due.
 
 ### Where AI is used — and where it isn't
 
@@ -79,6 +79,7 @@ Typical latency on the live deploy (`gpt-5.4-mini`): about 2 s to read a receipt
 Python 3.10+ (tested on 3.12 and 3.13).
 
 ```bash
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env               # optional: add OPENAI_API_KEY or GEMINI_API_KEY for real AI
 uvicorn server:app --reload        # open http://localhost:8000
@@ -142,7 +143,9 @@ Anyone with the link triggers AI calls on your key, so set a monthly budget limi
 - **Implemented:** AI receipt reading (OpenAI or Gemini), validation and editing, fees and suggested-tip detection, shareable bill link, live multi-person claiming, voice/text assignment with confirmation, exact proportional split, Venmo/Cash App deep links, paid tracking, reminders, retry and model fallback, Docker image, live deploy, 76 automated tests.
 - **Mocked / simplified:** AI output and the assignment matcher in demo mode; payments are deep links and "I've paid" is self-reported; identity is a name on the bill (no accounts); storage is one JSON file per bill; live updates poll every 2.5 s.
 
-**Next steps** ([full roadmap](docs/ROADMAP.md), 16 items): a payer admin link to fix the bill and people after sharing, per-unit and uneven shares, an AI accuracy evaluation on real receipts (OpenAI vs Gemini), and CI with browser end-to-end tests.
+**Next investigation:** benchmark 20–30 real receipts (line accuracy, edits needed, checksum catches) and observe 3–5 real dinners (claim rate, time until everyone has paid) before building more.
+
+**Deferred / next steps** ([full roadmap](docs/ROADMAP.md), 16 items): a payer admin link to fix the bill and people after sharing, per-unit and uneven shares, an AI accuracy evaluation on real receipts (OpenAI vs Gemini), and CI with browser end-to-end tests.
 
 **Edge cases** ([full list](docs/EDGE_CASES.md), 55 cases): 22 covered by automated tests, 6 checked by hand, 27 known gaps. The most important gaps: the suggested-tip warning also fires for a real handwritten tip when the printed total is the pre-tip amount; `12,50` is read as $1,250.00; two different people with the same name are merged; and anyone with the link can claim or mark paid for anyone.
 
@@ -150,7 +153,7 @@ Anyone with the link triggers AI calls on your key, so set a monthly budget limi
 
 - **Time spent:** about 3.5 hours.
 - **How AI was used:** I worked with an AI coding assistant (Claude Code) as a pair programmer:
-  - **Brainstorming:** product scope, which steps need AI and which must be plain code, and what could go wrong.
+  - **Brainstorming and research:** candidate problems, existing apps and their reviews, requirements and product scope, which steps need AI and which must be plain code, and what could go wrong.
   - **Writing code:** the FastAPI server, the mobile frontend, prompts and JSON schemas, tests, and the Dockerfile.
   - **Review:** an edge-case review of the working prototype. Each fix started with a failing test; the cases that are still open are listed in [docs/EDGE_CASES.md](docs/EDGE_CASES.md).
   - **Docs:** drafting this README and the docs folder.
